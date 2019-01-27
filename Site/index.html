@@ -2,39 +2,271 @@
 <html class="no-js" lang="">
 
 <head>
-  <meta charset="utf-8">
-  <meta http-equiv="x-ua-compatible" content="ie=edge">
-  <title></title>
-  <meta name="description" content="">
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	<meta charset="utf-8">
+	<meta http-equiv="x-ua-compatible" content="ie=edge">
+	<title></title>
+	<meta name="description" content="">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 
-  <link rel="manifest" href="site.webmanifest">
-  <link rel="apple-touch-icon" href="icon.png">
-  <!-- Place favicon.ico in the root directory -->
+	<link rel="manifest" href="site.webmanifest">
+	<link rel="apple-touch-icon" href="icon.png">
+	<!-- Place favicon.ico in the root directory -->
 
-  <link rel="stylesheet" href="css/normalize.css">
-  <link rel="stylesheet" href="css/main.css">
+	<link rel="stylesheet" href="css/normalize.css">
+	<link rel="stylesheet" href="css/main.css">
 </head>
 
 <body>
-  <!--[if lte IE 9]>
-    <p class="browserupgrade">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience and security.</p>
-  <![endif]-->
+	<!--[if lte IE 9]>
+		<p class="browserupgrade">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience and security.</p>
+	<![endif]-->
 
-  <!-- Add your site or application content here -->
-  <p>Hello world! This is HTML5 Boilerplate.</p>
-  <script src="js/vendor/modernizr-3.6.0.min.js"></script>
-  <script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
-  <script>window.jQuery || document.write('<script src="js/vendor/jquery-3.3.1.min.js"><\/script>')</script>
-  <script src="js/plugins.js"></script>
-  <script src="js/main.js"></script>
+	
+	<div id="Header">
+		<h1 id="ConversationTitle">Loading Room...</h1>
+	</div>
 
-  <!-- Google Analytics: change UA-XXXXX-Y to be your site's ID. -->
-  <script>
-    window.ga = function () { ga.q.push(arguments) }; ga.q = []; ga.l = +new Date;
-    ga('create', 'UA-XXXXX-Y', 'auto'); ga('send', 'pageview')
-  </script>
-  <script src="https://www.google-analytics.com/analytics.js" async defer></script>
+	<div id="Main">
+		<!--
+		<div class="Message">
+			<p class="MessageSender">Lachlan<span class="MessageTime">7:30am</span></p>
+			<p class="MessageBody">I think that this messaging platform is just completely and totally awful. I love it! :D</p>
+		</div>
+		<div class="Message">
+			<p class="MessageSender">Definitely not Lachlan<span class="MessageTime">7:30am</span></p>
+			<p class="MessageBody">I think you're an idiot.</p>
+		</div>
+		-->
+	</div>
+
+	<div id="MessageSend">
+		<input type="text" name="MessageInput" id="MessageInputField"/>
+		<button type="button" onClick="PushMessage();" id="MessageSendButton">Send Message</button>
+	</div>
+
+	<script src="https://www.gstatic.com/firebasejs/5.8.1/firebase.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/5.8.1/firebase-app.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/5.8.1/firebase-auth.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/5.8.1/firebase-database.js"></script>
+	<script>
+	// Initialize Firebase
+	var config = {
+		apiKey: "AIzaSyAcM-x78un217qadKIzFxHL1c7ObfamE1A",
+		authDomain: "ls-simplemessage.firebaseapp.com",
+		databaseURL: "https://ls-simplemessage.firebaseio.com",
+		projectId: "ls-simplemessage",
+		storageBucket: "ls-simplemessage.appspot.com",
+		messagingSenderId: "591459814121"
+	};
+	firebase.initializeApp(config);
+
+	var database = firebase.database();
+
+	var currentUser = getQueryVariable("debuguser");
+	if(!currentUser) {
+		alert("No debuguser oh no");
+	}
+
+	var roomName = getQueryVariable("room");
+	if(!roomName) {
+		alert("No room oh no");
+	}
+
+	var displayedMessages = [];
+	var Messages = [];
+
+	var messageRef = firebase.database().ref("rooms/" + roomName + "/messages");
+	messageRef.on('child_added', function(snapshot, prevkey) {
+		var data = snapshot.val();
+		var key = snapshot.key;
+		console.log("Child added: " + key);
+		console.log(JSON.stringify(data, null, 4));
+
+		if(!displayedMessages[key]) {
+			HandleNewMessage(key, data);
+			displayedMessages[key] = true;
+			Messages.push({
+				id: key,
+				value: data
+			});
+		}
+	});
+	messageRef.on('child_changed', function(snapshot, prevkey) {
+		var data = snapshot.val();
+		var key = snapshot.key;
+		console.log("Child changed: " + key);
+		console.log(JSON.stringify(data, null, 4));
+
+		UpdateMessage(key, data);
+		for(var i = 0; i < Messages.length; i++) {
+			if(Messages[i]["id"] == key) Messages[i]["value"] = data;
+		}
+	});
+	messageRef.on('child_removed', function(snapshot) {
+		var data = snapshot.val();
+		var key = snapshot.key;
+		console.log("Child removed: " + key);
+		console.log(JSON.stringify(data, null, 4));
+
+		RemoveMessage(key, data);
+		for(var i = 0; i < Messages.length; i++) {
+			if(Messages[i]["id"] == key) Messages.splice(i, 1);
+		}
+		displayedMessages.splice(displayedMessages.indexOf(key), 1);
+	});
+
+	document.getElementById("ConversationTitle").textContent = "Room: " + roomName;
+	
+	function HandleNewMessage(key, data) {
+		console.log(JSON.stringify(data, null, 4));
+		var main = document.getElementById("Main");
+		var newMessageDiv = document.createElement("div");
+		newMessageDiv.className = "Message";
+		if(data["sender"] == currentUser) newMessageDiv.className += " FromMe";
+		else newMessageDiv.className += " FromThem";
+		newMessageDiv.id = key;
+
+		var newMessageSender = document.createElement("p");
+		newMessageSender.className = "MessageSender";
+		var senderNameText = document.createTextNode(data["sender"]);
+		newMessageSender.appendChild(senderNameText);
+
+		var messageTime = document.createElement("span");
+		messageTime.className = "MessageTime";
+		var date = new Date(data["time"]);
+		var messageTimeText = document.createTextNode(getPrettyTime(date));
+		messageTime.appendChild(messageTimeText);
+		newMessageSender.appendChild(messageTime);
+
+		var messageBody = document.createElement("p");
+		messageBody.className = "MessageBody";
+		messageBody.innerHTML = data["content"];
+
+		newMessageDiv.appendChild(newMessageSender);
+		newMessageDiv.appendChild(messageBody);
+		main.appendChild(newMessageDiv);
+
+		window.scrollTo(0, document.body.scrollHeight);
+	}
+
+	function UpdateMessage(key, data) {
+		var message = document.getElementById(key);
+		message.childNodes[1].innerHTML = data["content"];
+		window.scrollTo(0, document.body.scrollHeight);
+	}
+
+	function RemoveMessage(key, data) {
+		var removeTarget = document.getElementById(key);
+		removeTarget.parentNode.removeChild(removeTarget);
+	}
+
+	function PushMessage() {
+		if(!document.getElementById("MessageInputField").value) return;
+
+		//three cases:
+		//0. user has no messages, so just push it
+		//1. user has a message which hasn't been responded to (i.e. most recent message is theirs),
+		//   in which case should append new content and update time
+		//2. user has a message which has been responded to (i.e. most recent message is NOT theirs), 
+		//   in which case should remove their last message and then just push
+
+		var messageCase = 0;
+		var lastMessage = Messages[Messages.length - 1];
+		var currentDate = new Date();
+		if(Messages.length == 0) messageCase = 0;
+		else if(lastMessage["value"]["sender"] == currentUser) messageCase = 1;
+		else if(lastMessage["value"]["sender"] != currentUser) messageCase = 2;
+
+		console.log("Message case: " + messageCase);
+
+		if(messageCase == 0) {
+			var newid = messageRef.push();
+			newid.set({
+				time: currentDate.getTime(),
+				sender: currentUser,
+				content: document.getElementById("MessageInputField").value
+			});
+		} else if(messageCase == 1) {
+			var lastMessageRef = messageRef.child(lastMessage["id"]);
+			var append = "<br><hr>" + document.getElementById("MessageInputField").value;
+			lastMessageRef.update({
+				time: currentDate.getTime(),
+				content: lastMessage["value"]["content"] + append
+			});
+		} else if(messageCase == 2) {
+			if(Messages.length > 1) {
+				var secondLastMessageRef = messageRef.child(Messages[Messages.length - 2]["id"]);
+				secondLastMessageRef.remove();
+			}
+
+			var newid = messageRef.push();
+			newid.set({
+				time: currentDate.getTime(),
+				sender: currentUser,
+				content: document.getElementById("MessageInputField").value
+			});
+		}
+
+		document.getElementById("MessageInputField").value = "";
+	}
+
+	function getQueryVariable(variable)	{
+		var query = window.location.search.substring(1);
+		var vars = query.split("&");
+		for (var i=0;i<vars.length;i++) {
+				var pair = vars[i].split("=");
+				if(pair[0] == variable){return pair[1];}
+		}
+		return(false);
+	}
+
+	function getPrettyTime(date) {
+		var am = true;
+		var hour = date.getHours();
+		if(hour > 11) {
+			am = false;
+			if(hour != 12) hour -= 12;
+		}
+		var hourString = "";
+		if(hour == 0) hourString = "12";
+		else if(hour < 10) hourString = "0" + hour;
+		else hourString = hour;
+		
+		var minute = date.getMinutes();
+		var minuteString = "";
+		if(minute == 0) minuteString = "00";
+		else if(minute < 10) minuteString = "0" + minute;
+		else minuteString = minute;
+
+		var output = hourString + ":" + minuteString + " ";
+		if(am) output += "AM";
+		else output += "PM";
+
+		return output;
+	}
+
+	document.getElementById("MessageInputField").onkeypress = function(e) {
+		if(!e) e = window.event;
+		var keyCode = e.keyCode || e.which;
+		if(keyCode == '13') {
+			PushMessage();
+		}
+	}
+	</script>
+
+
+	<script src="js/vendor/modernizr-3.6.0.min.js"></script>
+	<script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+	<script>window.jQuery || document.write('<script src="js/vendor/jquery-3.3.1.min.js"><\/script>')</script>
+	<script src="js/plugins.js"></script>
+	<script src="js/main.js"></script>
+
+	<!-- Google Analytics: change UA-XXXXX-Y to be your site's ID. -->
+	<script>
+		window.ga = function () { ga.q.push(arguments) }; ga.q = []; ga.l = +new Date;
+		ga('create', 'UA-XXXXX-Y', 'auto'); ga('send', 'pageview')
+	</script>
+	<script src="https://www.google-analytics.com/analytics.js" async defer></script>
 </body>
 
 </html>
