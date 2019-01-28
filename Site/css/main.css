@@ -109,16 +109,19 @@ textarea {
     padding: 0px 30px;
 }
 
-#MessageTitle {
+h1 {
     font-family: "Lucida Console", Monaco, monospace;
     font-size: 2.5em;
     color: #1d1d1d;
 }
 
-.Message {
-    font-size: 1.2em;
+p {
     font-family: "Lucida Console", Monaco, monospace;
     background-color: #1a1a1a;
+}
+
+.Message {
+    font-size: 1.2em;
     padding: 0.5em;
     margin-bottom: 1em;
 }
@@ -162,8 +165,7 @@ textarea {
     padding-bottom: 10px;
 }
 
-#MessageInputField {
-    width: 100%;
+input {
     font-size: 1.2em;
     font-family: "Lucida Console", Monaco, monospace;
     padding-bottom: 2px;
@@ -177,8 +179,16 @@ textarea {
     border-radius: 5px;
 }
 
+#MessageInputField {
+    width: 100%;
+}
+
 #MessageSendButton {
     float: right;
+    margin-right: 10px;
+}
+
+button {
     background-color: #CCCCCC;
     color: #1d1d1d;
     font-family: "Lucida Console", Monaco, monospace;
@@ -186,7 +196,6 @@ textarea {
     border: none;
     text-decoration: none;
     height: 36px;
-    margin-right: 10px;
 }
 
 
