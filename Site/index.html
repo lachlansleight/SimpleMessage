@@ -23,8 +23,9 @@
 
 	
 	<div id="Header">
-		<h1 id="ConversationTitle">Loading Room...</h1>
+		<h1 id="MessageTitle">Loading Room...</h1>
 		<h1 id="AuthenticationTitle">Simple Message</h1>
+		<h1 id="LobbyTitle">Choose Room</h1>
 	</div>
 
 	<div id="Main">
@@ -52,6 +53,28 @@
 				<input type="password" name="RegisterPassword" id="RegisterPasswordInput" />
 				<button type="button" onClick="Register();" id="RegisterButton">Register</button>
 				<p id="RegisterError"></p>
+			</div>
+		</div>
+		<div id="LobbyMain">
+			<div id="LobbyWelcome">
+				<button type="button" onClick="GotoCreate();" id="LoginButton">Create Room</button>
+				<button type="button" onClick="GotoJoin();" id="RegisterButton">Join Room</button>
+			</div>
+			<div id="LobbyCreate">
+				<button type="button" onClick="GotoLobbyWelcome();" id="CreateBackButton">Back</button>
+				<p>Room name</p>
+				<input type="text" name="CreateName" id="CreateNameInput" />
+				<p>Partner's Email</p>
+				<input type="text" name="CreateEmail" id="CreateEmailInput" />
+				<button type="button" onClick="CreateRoom();" id="CreateButton">Create</button>
+				<p id="CreateError"></p>
+			</div>
+			<div id="LobbyJoin">
+				<button type="button" onClick="GotoLobbyWelcome();" id="JoinBackButton">Back</button>
+				<p>Room name</p>
+				<input type="text" name="JoinName" id="JoinNameInput" />
+				<button type="button" onClick="JoinRoom();" id="JoinButton">Join</button>
+				<p id="JoinError"></p>
 			</div>
 		</div>
 		<div id="MessageMain">
@@ -91,46 +114,8 @@
 
 	var database = firebase.database();
 	var auth = firebase.auth();
-
-	var messageRef = firebase.database().ref("rooms/" + roomName + "/messages");
-	messageRef.on('child_added', function(snapshot, prevkey) {
-		var data = snapshot.val();
-		var key = snapshot.key;
-		console.log("Child added: " + key);
-		console.log(JSON.stringify(data, null, 4));
-
-		if(!displayedMessages[key]) {
-			HandleNewMessage(key, data);
-			displayedMessages[key] = true;
-			Messages.push({
-				id: key,
-				value: data
-			});
-		}
-	});
-	messageRef.on('child_changed', function(snapshot, prevkey) {
-		var data = snapshot.val();
-		var key = snapshot.key;
-		console.log("Child changed: " + key);
-		console.log(JSON.stringify(data, null, 4));
-
-		UpdateMessage(key, data);
-		for(var i = 0; i < Messages.length; i++) {
-			if(Messages[i]["id"] == key) Messages[i]["value"] = data;
-		}
-	});
-	messageRef.on('child_removed', function(snapshot) {
-		var data = snapshot.val();
-		var key = snapshot.key;
-		console.log("Child removed: " + key);
-		console.log(JSON.stringify(data, null, 4));
-
-		RemoveMessage(key, data);
-		for(var i = 0; i < Messages.length; i++) {
-			if(Messages[i]["id"] == key) Messages.splice(i, 1);
-		}
-		displayedMessages.splice(displayedMessages.indexOf(key), 1);
-	});
+	var messageRef = null;
+	
 	auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 	auth.onAuthStateChanged(function(user) {
 		if(user) {
@@ -146,29 +131,139 @@
 	if(currentUser) {
 		document.getElementById("AuthenticationMain").hidden = true;
 		document.getElementById("AuthenticationTitle").hidden = true;
-		document.getElementById("MessageMain").hidden = false;
-		document.getElementById("ConversationTitle").hidden = false;
+		document.getElementById("LobbyMain").hidden = false;
+		document.getElementById("LobbyTitle").hidden = false;
+		document.getElementById("MessageMain").hidden = true;
+		document.getElementById("MessageTitle").hidden = true;
 		console.log("Logged in as: \n" + JSON.stringify(currentUser, null, 4));
 	} else {
 		document.getElementById("AuthenticationMain").hidden = false;
 		document.getElementById("AuthenticationTitle").hidden = false;
+		document.getElementById("LobbyMain").hidden = true;
+		document.getElementById("LobbyTitle").hidden = true;
 		document.getElementById("MessageMain").hidden = true;
-		document.getElementById("ConversationTitle").hidden = true;
+		document.getElementById("MessageTitle").hidden = true;
 		console.log("Not logged in");
 	}
-	GotoWelcome();
 
-	var roomName = getQueryVariable("room");
-	if(!roomName) {
-		alert("No room oh no");
+	if(currentRoom) {
+
 	}
+	GotoWelcome();
+	GotoLobbyWelcome();
+
+	var currentRoom = null;
 
 	var displayedMessages = [];
 	var Messages = [];
 
 	
+	function CreateRoom() {
+		document.getElementById("CreateError").textContent = "";
 
-	document.getElementById("ConversationTitle").textContent = "Room: " + roomName;
+		var roomName = document.getElementById("CreateNameInput").value;
+		var email = document.getElementById("CreateEmailInput").value;
+		database.ref("rooms/" + roomName).once('value').then(function(snapshot) {
+			if(snapshot.exists()) {
+				document.getElementById("CreateError").textContent = "Room already exists";
+			} else {
+				database.ref("rooms/" + roomName).set({
+					creator : currentUser.email,
+					partner : email
+				}).then(function() {
+					console.log("created room with name " + roomName);
+					var newRoom = {
+						creator : currentUser.email,
+						partner : email
+					}
+					InitializeRoom(newRoom, roomName);
+					document.getElementById("LobbyMain").hidden = true;
+					document.getElementById("LobbyTitle").hidden = true;
+					document.getElementById("MessageMain").hidden = false;
+					document.getElementById("MessageTitle").hidden = false;
+				});
+			}
+		});
+	}
+
+	function JoinRoom() {
+		document.getElementById("JoinError").textContent = "";
+
+		var roomName = document.getElementById("JoinNameInput").value;
+		database.ref("rooms/" + roomName).once('value').then(function(snapshot) {
+			if(!snapshot.exists()) {
+				document.getElementById("JoinError").textContent = "Room does not exist";
+			} else {
+				var data = snapshot.val();
+				console.log(JSON.stringify(data, null, 4));
+				if(data["creator"] != currentUser.email && data["partner"] != currentUser.email) {
+					document.getElementById("JoinError").textContent = "You are not authorized to join that room";
+				} else {
+					console.log("Joining room named " + snapshot.key);
+					InitializeRoom(data, snapshot.key);
+					document.getElementById("LobbyMain").hidden = true;
+					document.getElementById("LobbyTitle").hidden = true;
+					document.getElementById("MessageMain").hidden = false;
+					document.getElementById("MessageTitle").hidden = false;
+				}
+			}
+		});
+	}
+
+	function InitializeRoom(newRoom, key) {
+		newRoom.name = key;
+		if(currentRoom) {
+			messageRef = database.ref("rooms/" + currentRoom.name + "/messages");
+			messageRef.off('child_changed');
+			messageRef.off('child_removed');
+			messageRef.off('child_added');
+		}
+
+		currentRoom = newRoom;
+
+		messageRef = database.ref("rooms/" + currentRoom.name + "/messages");
+		console.log("Created messageref at rooms/" + currentRoom.name + "/messages");
+
+		document.getElementById("MessageTitle").textContent = "Room: " + currentRoom.name;
+		messageRef.on('child_added', function(snapshot, prevkey) {
+			var data = snapshot.val();
+			var key = snapshot.key;
+			console.log("Child added: " + key);
+			console.log(JSON.stringify(data, null, 4));
+
+			if(!displayedMessages[key]) {
+				HandleNewMessage(key, data);
+				displayedMessages[key] = true;
+				Messages.push({
+					id: key,
+					value: data
+				});
+			}
+		});
+		messageRef.on('child_changed', function(snapshot, prevkey) {
+			var data = snapshot.val();
+			var key = snapshot.key;
+			console.log("Child changed: " + key);
+			console.log(JSON.stringify(data, null, 4));
+
+			UpdateMessage(key, data);
+			for(var i = 0; i < Messages.length; i++) {
+				if(Messages[i]["id"] == key) Messages[i]["value"] = data;
+			}
+		});
+		messageRef.on('child_removed', function(snapshot) {
+			var data = snapshot.val();
+			var key = snapshot.key;
+			console.log("Child removed: " + key);
+			console.log(JSON.stringify(data, null, 4));
+
+			RemoveMessage(key, data);
+			for(var i = 0; i < Messages.length; i++) {
+				if(Messages[i]["id"] == key) Messages.splice(i, 1);
+			}
+			displayedMessages.splice(displayedMessages.indexOf(key), 1);
+		});
+	}
 	
 	function HandleNewMessage(key, data) {
 		console.log(JSON.stringify(data, null, 4));
@@ -217,8 +312,10 @@
 			console.log("Register success! User display name is " + currentUser.displayName + "/" + currentUser.email);
 			document.getElementById("AuthenticationMain").hidden = true;
 			document.getElementById("AuthenticationTitle").hidden = true;
-			document.getElementById("MessageMain").hidden = false;
-			document.getElementById("ConversationTitle").hidden = false;
+			document.getElementById("LobbyMain").hidden = false;
+			document.getElementById("LobbyTitle").hidden = false;
+			document.getElementById("MessageMain").hidden = true;
+			document.getElementById("MessageTitle").hidden = true;
 		}).catch(function(error) {
 			document.getElementById("RegisterError").textContent = error.message + "(" + error.code + ")";
 		})
@@ -232,8 +329,10 @@
 			console.log("Login success! User display name is " + currentUser.displayName + "/" + currentUser.email);
 			document.getElementById("AuthenticationMain").hidden = true;
 			document.getElementById("AuthenticationTitle").hidden = true;
-			document.getElementById("MessageMain").hidden = false;
-			document.getElementById("ConversationTitle").hidden = false;
+			document.getElementById("LobbyMain").hidden = false;
+			document.getElementById("LobbyTitle").hidden = false;
+			document.getElementById("MessageMain").hidden = true;
+			document.getElementById("MessageTitle").hidden = true;
 		}).catch(function(error) {
 			document.getElementById("LoginError").textContent = error.message + "(" + error.code + ")";
 		});
@@ -260,6 +359,29 @@
 		document.getElementById("AuthenticationRegister").hidden = true;
 	}
 
+	function GotoJoin()
+	{
+		document.getElementById("LobbyWelcome").hidden = true;
+		document.getElementById("LobbyJoin").hidden = false;
+		document.getElementById("LobbyCreate").hidden = true;
+	}
+
+	function GotoCreate()
+	{
+		document.getElementById("LobbyWelcome").hidden = true;
+		document.getElementById("LobbyJoin").hidden = true;
+		document.getElementById("LobbyCreate").hidden = false;
+	}
+
+	function GotoLobbyWelcome()
+	{
+		document.getElementById("LobbyWelcome").hidden = false;
+		document.getElementById("LobbyJoin").hidden = true;
+		document.getElementById("LobbyCreate").hidden = true;
+	}
+
+
+
 	function UpdateMessage(key, data) {
 		var message = document.getElementById(key);
 		message.childNodes[1].innerHTML = data["content"];
@@ -273,6 +395,8 @@
 
 	function PushMessage() {
 		if(!document.getElementById("MessageInputField").value) return;
+
+		console.log(JSON.stringify(messageRef, null, 4));
 
 		//three cases:
 		//0. user has no messages, so just push it
